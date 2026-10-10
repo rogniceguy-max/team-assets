@@ -32,20 +32,57 @@ class ProjectMixin:
         c.execute("INSERT OR IGNORE INTO settings VALUES('initialized','1')")
         self.migrate_material_pool(c)
 
-    def list_projects(self, limit=50, offset=0):
+    def list_projects(self, limit=50, offset=0, sort_by="position", order="asc"):
         self._page(limit, offset)
+        sort_columns = {"position": "rowid", "name": "name COLLATE NOCASE"}
+        if sort_by not in sort_columns or order not in {"asc", "desc"}:
+            raise HTTPException(422, "项目排序字段或方向不正确")
+        ordering = f"{sort_columns[sort_by]} {order.upper()}"
         with self.connect() as c:
             return {
                 "projects": [
                     dict(r)
                     for r in c.execute(
-                        "SELECT * FROM projects WHERE deleted_at IS NULL ORDER BY rowid LIMIT ? OFFSET ?",
+                        f"SELECT * FROM projects WHERE deleted_at IS NULL ORDER BY {ordering} LIMIT ? OFFSET ?",
                         (limit, offset),
                     )
                 ],
                 "total": c.execute("SELECT COUNT(*) FROM projects WHERE deleted_at IS NULL").fetchone()[0],
                 "limit": limit,
                 "offset": offset,
+            }
+
+    def get_project(self, project_id):
+        with self.connect() as c:
+            return self.require(c, "projects", project_id)
+
+    def list_trash(self, entity_type=None, limit=50, offset=0):
+        self._page(limit, offset)
+        if entity_type is not None and entity_type not in {"project", "asset", "variant", "material"}:
+            raise HTTPException(422, "entity_type 必须是 project、asset、variant 或 material")
+        selects = [
+            "SELECT 'project' AS entity_type,id,name,deleted_at,delete_batch,version,NULL AS parent_id FROM projects WHERE deleted_at IS NOT NULL",
+            "SELECT 'asset' AS entity_type,id,name,deleted_at,delete_batch,version,project_id AS parent_id FROM assets WHERE deleted_at IS NOT NULL",
+            "SELECT 'variant' AS entity_type,id,name,deleted_at,delete_batch,version,asset_id AS parent_id FROM variants WHERE deleted_at IS NOT NULL",
+            "SELECT 'material' AS entity_type,id,name,deleted_at,delete_batch,version,asset_id AS parent_id FROM materials WHERE deleted_at IS NOT NULL",
+        ]
+        union = " UNION ALL ".join(selects)
+        filters = " WHERE entity_type=?" if entity_type else ""
+        values = (entity_type,) if entity_type else ()
+        with self.connect() as c:
+            rows = c.execute(
+                f"SELECT * FROM ({union}) AS deleted{filters} ORDER BY deleted_at DESC,id LIMIT ? OFFSET ?",
+                (*values, limit, offset),
+            ).fetchall()
+            total = c.execute(
+                f"SELECT COUNT(*) FROM ({union}) AS deleted{filters}", values
+            ).fetchone()[0]
+            return {
+                "items": [dict(row) for row in rows],
+                "total": total,
+                "limit": limit,
+                "offset": offset,
+                "entity_type": entity_type,
             }
 
     def create_project(self, name, description=""):

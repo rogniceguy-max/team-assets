@@ -54,8 +54,15 @@ class AssetMixin:
             self.event(c, "update_asset", asset_id, {"before": before, "changes": changes})
             return self.require(c, "assets", asset_id)
 
-    def search_assets(self, query="", project_id=None, category=None, limit=50, offset=0):
+    def search_assets(
+        self, query="", project_id=None, category=None, limit=50, offset=0,
+        sort_by="position", order="asc",
+    ):
         self._page(limit, offset)
+        sort_columns = {"position": "a.rowid", "name": "a.name COLLATE NOCASE"}
+        if sort_by not in sort_columns or order not in {"asc", "desc"}:
+            raise HTTPException(422, "资产排序字段或方向不正确")
+        ordering = f"{sort_columns[sort_by]} {order.upper()}"
         filters = ["a.deleted_at IS NULL", "p.deleted_at IS NULL", "instr(lower(a.name),lower(?)) > 0"]
         values = [query]
         if project_id is not None:
@@ -67,7 +74,7 @@ class AssetMixin:
         base = "FROM assets a JOIN projects p ON p.id=a.project_id WHERE " + " AND ".join(filters)
         with self.connect() as c:
             rows = c.execute(
-                "SELECT a.*, p.name AS project_name " + base + " ORDER BY a.rowid LIMIT ? OFFSET ?",
+                "SELECT a.*, p.name AS project_name " + base + f" ORDER BY {ordering} LIMIT ? OFFSET ?",
                 (*values, limit, offset),
             ).fetchall()
             assets = []
@@ -94,6 +101,28 @@ class AssetMixin:
                 )
             ]
             return result
+
+    def list_variants(self, asset_id, limit=50, offset=0, sort_by="position", order="asc"):
+        self._page(limit, offset)
+        sort_columns = {"position": "rowid", "name": "name COLLATE NOCASE"}
+        if sort_by not in sort_columns or order not in {"asc", "desc"}:
+            raise HTTPException(422, "变体排序字段或方向不正确")
+        ordering = f"{sort_columns[sort_by]} {order.upper()}"
+        with self.connect() as c:
+            self.require(c, "assets", asset_id)
+            rows = c.execute(
+                f"SELECT * FROM variants WHERE asset_id=? AND deleted_at IS NULL ORDER BY {ordering} LIMIT ? OFFSET ?",
+                (asset_id, limit, offset),
+            ).fetchall()
+            return {
+                "variants": [self._path(c, "variants", row) for row in rows],
+                "total": c.execute(
+                    "SELECT COUNT(*) FROM variants WHERE asset_id=? AND deleted_at IS NULL", (asset_id,)
+                ).fetchone()[0],
+                "limit": limit,
+                "offset": offset,
+                "asset_id": asset_id,
+            }
 
     def create_variant(self, asset_id, name, episodes="", description="", episode_usages=None):
         return self._create(

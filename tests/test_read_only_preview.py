@@ -38,6 +38,10 @@ def test_read_only_service_and_rest_reject_all_writes(tmp_path):
     with TestClient(create_app(service=preview_service)) as client:
         assert client.get("/api/state").status_code == 200
         assert client.get(material["url"]).content == image_bytes()
+        preview_delete = client.post(
+            f"/api/v1/assets/{asset['id']}/delete-preview", json={"version": asset["version"]}
+        )
+        assert preview_delete.status_code == 200, preview_delete.text
         for method, path, kwargs in (
             ("post", "/api/projects", {"json": {"name": "不能写入"}}),
             ("patch", f"/api/assets/{asset['id']}", {"json": {"version": 1, "name": "不能改"}}),

@@ -1,10 +1,17 @@
 """Pydantic request and patch models for REST API."""
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ProjectInput(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     description: str = Field(default="", max_length=20000)
+
+
+class ProjectPatch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    version: int = Field(ge=1, strict=True)
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    description: str | None = Field(default=None, max_length=20000)
 
 
 class AssetInput(BaseModel):
@@ -15,7 +22,7 @@ class AssetInput(BaseModel):
 
 
 class AssetPatch(BaseModel):
-    model_config = {"extra": "forbid"}
+    model_config = ConfigDict(extra="forbid")
     version: int = Field(ge=1, strict=True)
     name: str | None = Field(default=None, min_length=1, max_length=200)
     category: str | None = Field(default=None, min_length=1, max_length=100)

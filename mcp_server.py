@@ -158,7 +158,7 @@ class BearerAndBodyLimitMiddleware:
 
 def create_app(data_dir: str | Path | None = None, token: str | None = None,
                auth_mode: str | None = None, streamable_http_path: str = "/mcp",
-               *, service=None, read_only: bool | None = None):
+               *, service=None, read_only: bool | None = None, upload_manager=None):
     """Create the MCP ASGI app.
 
     ``auth_mode`` accepts ``none`` (the default for the NAS) or ``bearer``.
@@ -184,6 +184,8 @@ def create_app(data_dir: str | Path | None = None, token: str | None = None,
         if read_only is None
         else bool(read_only)
     )
+    if service is None and upload_manager is not None:
+        service = upload_manager.service
     if service is None:
         service = AssetService(
             data_dir or os.environ.get("DATA_DIR", str(Path(__file__).parent / "data")),
@@ -191,7 +193,9 @@ def create_app(data_dir: str | Path | None = None, token: str | None = None,
         )
     elif read_only is not None and bool(getattr(service, "read_only", False)) != configured_read_only:
         raise ValueError("read_only must match the injected service mode")
-    uploads = UploadManager(service)
+    if upload_manager is not None and upload_manager.service is not service:
+        raise ValueError("upload_manager must use the injected service instance")
+    uploads = upload_manager or UploadManager(service)
     intake = IntakeService(service)
     mcp = FastMCP("Team Assets", host="0.0.0.0", port=8001, stateless_http=True,
                   streamable_http_path=streamable_http_path, json_response=True,

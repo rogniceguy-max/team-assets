@@ -182,8 +182,19 @@ class CandidateMixin:
             self.require(c, "projects", result["project_id"])
         return result
 
-    def list_candidates(self, project_id, query="", category=None, status="active", limit=50, offset=0):
+    def list_candidates(
+        self, project_id, query="", category=None, status="active", limit=50, offset=0,
+        sort_by="position", order="asc",
+    ):
         self._page(limit, offset)
+        sort_columns = {
+            "position": "ca.folder_path,ca.sort_order,ca.rowid",
+            "name": "ca.folder_path,ca.name COLLATE NOCASE,ca.sort_order,ca.rowid",
+            "created_at": "ca.folder_path,ca.created_at,ca.sort_order,ca.rowid",
+        }
+        if sort_by not in sort_columns or order not in {"asc", "desc"}:
+            raise HTTPException(422, "候选素材排序字段或方向不正确")
+        ordering = ",".join(f"{column} {order.upper()}" for column in sort_columns[sort_by].split(","))
         if not isinstance(project_id, str) or not project_id:
             raise HTTPException(422, "project_id 不能为空")
         if not isinstance(query, str) or len(query) > 255:
@@ -219,7 +230,7 @@ class CandidateMixin:
                 "SELECT ca.*,f.mime,f.size,f.width,f.height,f.sha256, "
                 f"({inherited_disabled_sql}) AS _inherited_disabled "
                 + base
-                + " ORDER BY ca.folder_path,ca.sort_order,ca.rowid LIMIT ? OFFSET ?",
+                + f" ORDER BY {ordering} LIMIT ? OFFSET ?",
                 [*values, limit, offset],
             ).fetchall()
             candidates = []
@@ -431,12 +442,23 @@ class CandidateMixin:
             self.event(c, "move_candidate", candidate_id, {"before": before, "target_folder_path": target})
             return self._candidate_row(c, candidate_id)
 
-    def reorder_candidate_entries(self, project_id, parent_path, entries):
+    def reorder_candidate_entries(self, project_id, parent_path, entries, expected_revision=None):
         parent = self._normalize_folder_path(parent_path)
         if not isinstance(entries, list) or not entries:
             raise HTTPException(422, "排序列表不能为空")
         with self.connect(write=True) as c:
             self.require(c, "projects", project_id)
+            if expected_revision is not None:
+                current_revision = c.execute("SELECT COALESCE(MAX(revision),0) FROM events").fetchone()[0]
+                if expected_revision != current_revision:
+                    raise HTTPException(
+                        409,
+                        {
+                            "code": "REVISION_CONFLICT",
+                            "message": "项目内容已变化，请重新读取后排序",
+                            "current_revision": current_revision,
+                        },
+                    )
             folders = c.execute(
                 "SELECT id FROM candidate_folders WHERE project_id=? AND parent_path=?", (project_id, parent)
             ).fetchall()

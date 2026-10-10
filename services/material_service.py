@@ -245,8 +245,15 @@ class MaterialMixin:
                 self.event(c, "restore_material", material_id)
             return self.material(self.require(c, "materials", material_id))
 
-    def list_materials(self, variant_id=None, limit=50, offset=0, asset_id=None):
+    def list_materials(
+        self, variant_id=None, limit=50, offset=0, asset_id=None,
+        sort_by="position", order="asc",
+    ):
         self._page(limit, offset)
+        sort_columns = {"position": "m.rowid", "name": "m.name COLLATE NOCASE", "created_at": "m.created_at"}
+        if sort_by not in sort_columns or order not in {"asc", "desc"}:
+            raise HTTPException(422, "素材排序字段或方向不正确")
+        ordering = f"{sort_columns[sort_by]} {order.upper()}"
         with self.connect() as c:
             if bool(variant_id) == bool(asset_id):
                 raise HTTPException(422, "variant_id 与 asset_id 必须且只能提供一个")
@@ -254,7 +261,8 @@ class MaterialMixin:
                 asset_id = self.require(c, "variants", variant_id)["asset_id"]
             self.require(c, "assets", asset_id)
             rows = c.execute(
-                "SELECT m.*,f.mime,f.size,f.width,f.height,f.sha256 FROM materials m JOIN files f ON f.id=m.file_id WHERE m.asset_id=? AND m.deleted_at IS NULL ORDER BY m.rowid LIMIT ? OFFSET ?",
+                "SELECT m.*,f.mime,f.size,f.width,f.height,f.sha256 FROM materials m JOIN files f ON f.id=m.file_id WHERE m.asset_id=? AND m.deleted_at IS NULL "
+                + f"ORDER BY {ordering} LIMIT ? OFFSET ?",
                 (asset_id, limit, offset),
             )
             return {
@@ -265,3 +273,16 @@ class MaterialMixin:
                 "limit": limit,
                 "offset": offset,
             }
+
+    def get_material(self, material_id):
+        with self.connect() as c:
+            row = c.execute(
+                "SELECT m.*,f.mime,f.size,f.width,f.height,f.sha256 FROM materials m "
+                "JOIN files f ON f.id=m.file_id WHERE m.id=?",
+                (material_id,),
+            ).fetchone()
+            if row is None:
+                raise HTTPException(404, {"code": "NOT_FOUND", "message": "素材不存在"})
+            if row["deleted_at"]:
+                raise HTTPException(409, {"code": "ENTITY_DELETED", "message": "素材已删除"})
+            return self._path(c, "materials", self.material(row))

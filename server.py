@@ -8,6 +8,7 @@ from urllib.parse import urlsplit
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -16,7 +17,11 @@ from routers.assets import router as assets_router
 from routers.candidates import router as candidates_router
 from routers.events import router as events_router
 from routers.projects import router as projects_router
+from routers.v1 import router as v1_router
 from services.facade import AssetService
+from intake import IntakeService
+from uploads import UploadManager
+from schemas.public import ERROR_RESPONSES, RevisionResponse
 
 
 def _normalize_origin(value):
@@ -53,14 +58,41 @@ def _cors_origins_from_environment():
     return origins
 
 
-def create_app(data_dir=None, static_dir=None, mcp_app=None, *, service=None, read_only=None):
-    app = FastAPI(title="Team Assets", version="0.1.0")
+def create_app(
+    data_dir=None,
+    static_dir=None,
+    mcp_app=None,
+    *,
+    service=None,
+    read_only=None,
+    upload_manager=None,
+):
+    app = FastAPI(
+        title="Team Assets Public API",
+        version="1.0.0",
+        description=(
+            "Team Assets REST API for independently developed internal clients. "
+            "This deployment has no required user authentication; restrict network access "
+            "to the trusted LAN/VPN. CORS is not authentication and must not be treated as such."
+        ),
+        openapi_tags=[
+            {"name": "Projects and activity", "description": "Projects, trash, history, and coverage."},
+            {"name": "Assets and materials", "description": "Assets, variants, shared media, and finals."},
+            {"name": "Candidate library", "description": "Candidate media, folders, ordering, and references."},
+            {"name": "Uploads and intake", "description": "Resumable binary upload and atomic intake."},
+            {"name": "Project import", "description": "Validate and atomically apply project manifests."},
+            {"name": "Files", "description": "Original media and thumbnail streaming."},
+            {"name": "Events", "description": "SSE revision notifications."},
+        ],
+    )
     allowed_origins = _cors_origins_from_environment()
     configured_read_only = (
         os.environ.get("TEAM_ASSETS_READ_ONLY", "0").strip().lower() in {"1", "true", "yes", "on"}
         if read_only is None
         else bool(read_only)
     )
+    if service is None and upload_manager is not None:
+        service = upload_manager.service
     if service is None:
         service = AssetService(
             data_dir or os.environ.get("DATA_DIR", str(Path(__file__).parent / "data")),
@@ -69,7 +101,12 @@ def create_app(data_dir=None, static_dir=None, mcp_app=None, *, service=None, re
     elif read_only is not None and bool(getattr(service, "read_only", False)) != configured_read_only:
         raise ValueError("read_only must match the injected service mode")
     configured_read_only = bool(getattr(service, "read_only", configured_read_only))
+    if upload_manager is not None and upload_manager.service is not service:
+        raise ValueError("upload_manager must use the injected service instance")
     app.state.service = service
+    app.state.read_only = configured_read_only
+    app.state.uploads = upload_manager or UploadManager(service)
+    app.state.intake = IntakeService(service)
     revision_poller_task = None
     revision_poller_ready = None
 
@@ -96,9 +133,17 @@ def create_app(data_dir=None, static_dir=None, mcp_app=None, *, service=None, re
 
     @app.middleware("http")
     async def origin_and_read_only_policy(request, call_next):
+        read_only_post = (
+            request.method == "POST"
+            and (
+                request.url.path.endswith("/delete-preview")
+                or request.url.path == "/api/v1/project-imports/plan"
+            )
+        )
         if (
             configured_read_only
             and request.method in {"POST", "PUT", "PATCH", "DELETE"}
+            and not read_only_post
             and not request.url.path.startswith("/mcp")
         ):
             return JSONResponse(
@@ -150,8 +195,24 @@ def create_app(data_dir=None, static_dir=None, mcp_app=None, *, service=None, re
     app.include_router(assets_router)
     app.include_router(candidates_router)
     app.include_router(events_router)
+    app.include_router(v1_router)
 
-    @app.get("/api/events")
+    @app.get(
+        "/api/v1/events",
+        response_class=StreamingResponse,
+        tags=["Events"],
+        summary="Subscribe to workspace revision changes",
+        description="Each data change emits a revision event. Fetch affected resources after receiving it; this stream does not replay a full event log.",
+        responses={200: {"description": "Server-sent `data: {\"revision\": number}` event stream", "content": {"text/event-stream": {"schema": {"type": "string"}}}}},
+    )
+    @app.get(
+        "/api/events",
+        response_class=StreamingResponse,
+        tags=["Events"],
+        summary="Legacy SSE change stream",
+        deprecated=True,
+        responses={200: {"description": "Server-sent revision event stream", "content": {"text/event-stream": {"schema": {"type": "string"}}}}},
+    )
     async def events(request: Request):
         svc = (
             getattr(request, "app", None)
@@ -195,6 +256,37 @@ def create_app(data_dir=None, static_dir=None, mcp_app=None, *, service=None, re
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
 
+    @app.get(
+        "/api/v1/revision",
+        response_model=RevisionResponse,
+        responses=ERROR_RESPONSES,
+        tags=["Events"],
+        summary="Read the current workspace revision",
+    )
+    def current_revision(request: Request):
+        return {"revision": request.app.state.service.revision()}
+
+    def public_openapi():
+        if app.openapi_schema:
+            return app.openapi_schema
+        schema = get_openapi(
+            title=app.title,
+            version=app.version,
+            description=app.description,
+            routes=app.routes,
+            tags=app.openapi_tags,
+        )
+        for path, methods in schema.get("paths", {}).items():
+            if (path.startswith("/api/") and not path.startswith("/api/v1/")) or path.startswith("/files/"):
+                for operation in methods.values():
+                    operation["deprecated"] = True
+                    note = "Compatibility route retained for existing clients. New clients should use `/api/v1`."
+                    operation["description"] = f"{operation.get('description', '')}\n\n{note}".strip()
+        app.openapi_schema = schema
+        return schema
+
+    app.openapi = public_openapi
+
     if mcp_app is not None:
         app.mount("/mcp", mcp_app)
         api_lifespan = app.router.lifespan_context
@@ -218,16 +310,23 @@ def _default_app():
     data_dir = os.environ.get("DATA_DIR", str(Path(__file__).parent / "data"))
     read_only = os.environ.get("TEAM_ASSETS_READ_ONLY", "0").strip().lower() in {"1", "true", "yes", "on"}
     service = AssetService(data_dir, read_only=read_only)
+    upload_manager = UploadManager(service)
     preview_mcp = None
     if os.environ.get("ENABLE_MCP_HTTP") == "1":
         from mcp_server import create_app as create_mcp_app
 
         preview_mcp = create_mcp_app(
             service=service,
+            upload_manager=upload_manager,
             auth_mode=os.environ.get("MCP_AUTH_MODE", "none"),
             streamable_http_path="/",
         )
-    return create_app(service=service, static_dir=os.environ.get("WEB_DIR"), mcp_app=preview_mcp)
+    return create_app(
+        service=service,
+        upload_manager=upload_manager,
+        static_dir=os.environ.get("WEB_DIR"),
+        mcp_app=preview_mcp,
+    )
 
 
 app = _default_app()

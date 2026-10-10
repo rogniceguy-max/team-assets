@@ -1,6 +1,7 @@
 """Server-Sent Events (SSE) broadcasting and revision tracking."""
 import asyncio
 import json
+from fastapi import HTTPException
 from core.utils import now
 
 
@@ -84,4 +85,23 @@ class EventBusMixin:
                     {**dict(r), "details": json.loads(r["details"])}
                     for r in c.execute("SELECT * FROM events ORDER BY revision DESC LIMIT 100")
                 ]
+            }
+
+    def list_history(self, limit=50, offset=0, action=None):
+        self._page(limit, offset)
+        if action is not None and (not isinstance(action, str) or not action.strip() or len(action) > 100):
+            raise HTTPException(422, "历史操作类型不正确")
+        filters = " WHERE action=?" if action else ""
+        values = (action,) if action else ()
+        with self.connect() as c:
+            rows = c.execute(
+                "SELECT * FROM events" + filters + " ORDER BY revision DESC LIMIT ? OFFSET ?",
+                (*values, limit, offset),
+            ).fetchall()
+            return {
+                "events": [{**dict(row), "details": json.loads(row["details"])} for row in rows],
+                "total": c.execute("SELECT COUNT(*) FROM events" + filters, values).fetchone()[0],
+                "limit": limit,
+                "offset": offset,
+                "action": action,
             }
