@@ -1,0 +1,27 @@
+services:
+  web:
+    build: .
+    ports:
+      - "${WEB_PORT:-8092}:8000"
+    environment:
+      DATA_DIR: /data
+    volumes:
+      - ./data:/data
+      - ./web-dock:/app/web:ro
+    restart: unless-stopped
+  mcp:
+    build: .
+    command: ["python", "mcp_server.py"]
+    ports:
+      - "${MCP_PORT:-8093}:8001"
+    environment:
+      DATA_DIR: /data
+      # LAN deployment is intentionally no-auth by default. Override these
+      # values in the environment for a different host or to re-enable Bearer.
+      TEAM_ASSETS_PUBLIC_MCP_URL: ${TEAM_ASSETS_PUBLIC_MCP_URL:-http://192.168.10.28:8093}
+      MAX_FILE_BYTES: ${MAX_FILE_BYTES:-0}
+      MCP_AUTH_MODE: ${MCP_AUTH_MODE:-none}
+      TEAM_ASSETS_MCP_TOKEN: ${TEAM_ASSETS_MCP_TOKEN:-}
+    volumes:
+      - ./data:/data
+    restart: unless-stopped

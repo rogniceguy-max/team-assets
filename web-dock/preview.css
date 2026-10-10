@@ -1,0 +1,69 @@
+/* Full-screen media preview. The existing site header stays above this layer
+   so its project and library controls remain usable while the preview is open. */
+html.preview-locked,
+body.preview-locked{overflow:hidden!important}
+
+#preview{display:none!important}
+#previewOverlay[hidden]{display:none}
+#previewOverlay{position:fixed;inset:0;z-index:35;color:#fff;background:rgb(0 0 0 / 75%);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);isolation:isolate}
+.preview-overlay-backdrop{position:absolute;inset:0;cursor:pointer}
+.preview-overlay-content{position:absolute;inset:var(--header-height) 0 0;display:flex;flex-direction:column;align-items:center;min-width:0;box-sizing:border-box;padding:59px 96px calc(var(--dock-bottom) + 50px + 36px);pointer-events:none}
+/* Keep the cards at the Figma-defined 100px while reserving 2px of
+   breathing room for the active card's outside stroke. The stage margin is
+   reduced by the same amount so the visible vertical rhythm stays exact. */
+.preview-filmstrip{display:flex;align-items:center;justify-content:center;gap:10px;box-sizing:border-box;flex:0 0 104px;width:100%;height:104px;min-height:104px;padding:2px;overflow:hidden;pointer-events:auto}
+.preview-filmstrip button{position:relative;display:block;flex:0 0 auto;height:100px;min-height:100px;width:100px;padding:0;border:0;border-radius:12px;overflow:hidden;background:#171717;color:#fff;cursor:pointer;opacity:.82;isolation:isolate;transition:opacity 160ms ease,box-shadow 160ms ease,transform 160ms ease}
+.preview-filmstrip button:not(.is-active)::after{content:"";position:absolute;inset:0;z-index:2;border-radius:inherit;background:rgb(0 0 0 / 52%);pointer-events:none;transition:background-color 160ms ease}
+.preview-filmstrip button:not(.is-active):hover::after{background:rgb(0 0 0 / 38%)}
+.preview-filmstrip button:hover{opacity:1;transform:translateY(-1px)}
+.preview-filmstrip button.is-active{opacity:1;box-shadow:0 0 0 2px #0c8ce9,0 0 12px rgb(12 140 233 / 42%)}
+.preview-filmstrip img,.preview-filmstrip video{display:block;width:100%;height:100%;object-fit:cover;background:#171717;pointer-events:none}
+.preview-stage{position:relative;display:flex;align-items:center;justify-content:center;width:100%;flex:1 1 auto;min-height:0;height:auto;margin-top:36px;overflow:hidden;pointer-events:none}
+.preview-current{position:relative;z-index:2;display:flex;align-items:center;justify-content:center;max-width:100%;max-height:100%;min-width:0;width:auto;height:100%;background:#111;--preview-shift:0px;pointer-events:auto}
+.preview-current[data-direction="next"]{--preview-shift:24px}
+.preview-current[data-direction="previous"]{--preview-shift:-24px}
+.preview-current img,.preview-current video{display:block;width:auto;height:100%;max-width:100%;max-height:100%;object-fit:contain;background:#111;border-radius:0;box-shadow:0 12px 32px rgb(0 0 0 / 18%);animation:none}
+.preview-current.is-initial img,.preview-current.is-initial video{animation:preview-media-enter 180ms ease both}
+.preview-current.is-switching img,.preview-current.is-switching video{animation:preview-media-switch 300ms cubic-bezier(.22,.75,.25,1) both}
+.preview-current video{width:auto;height:100%;max-height:100%}
+.preview-neighbor{position:absolute;z-index:1;top:3%;width:auto;max-width:none;height:94%;padding:0;border:0;border-radius:0;overflow:hidden;background:#111;opacity:.2;cursor:pointer;pointer-events:auto;transition:opacity 160ms ease}
+.preview-neighbor:hover{opacity:.36}
+.preview-neighbor-prev{left:0}.preview-neighbor-next{right:0}
+.preview-neighbor img,.preview-neighbor video{display:block;width:100%;height:100%;object-fit:cover;background:#111;pointer-events:none}
+.preview-caption{position:relative;z-index:2;max-width:min(1678px,100%);margin-top:36px;padding:0 12px;color:#fff;font-size:16px;line-height:24px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none}
+.preview-toolbar,.preview-mark-menu{position:fixed;z-index:50;display:flex;align-items:center;gap:6px;height:50px;padding:4px 8px;border:1px solid #1e1e1e;border-radius:16px;background:rgb(0 0 0 / 75%);box-shadow:-5px 10px 20px #000;backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);color:#fff;pointer-events:auto}
+.preview-toolbar{left:50%;bottom:var(--dock-bottom);width:auto;min-width:242px;max-width:calc(100vw - 32px);transform:translateX(-50%)}
+.preview-toolbar button,.preview-mark-menu button{position:relative;display:flex;align-items:center;justify-content:center;flex:0 0 40px;width:40px;height:40px;min-height:40px;padding:0;border:0;border-radius:12px;background:transparent;color:#fff;cursor:pointer;transition:background-color 140ms ease,color 140ms ease}
+.preview-toolbar button:hover,.preview-toolbar button:focus-visible,.preview-mark-menu button:hover,.preview-mark-menu button:focus-visible{background:#2c2c2c;outline:none}
+.preview-toolbar button:focus-visible,.preview-mark-menu button:focus-visible{box-shadow:0 0 0 2px #0c8ce9 inset}
+.preview-toolbar-icon{display:block;width:40px;height:40px;background:currentColor;mask:var(--icon) center/40px 40px no-repeat;-webkit-mask:var(--icon) center/40px 40px no-repeat;pointer-events:none}
+.preview-toolbar button::after,.preview-mark-menu button::after{content:attr(data-tip);position:absolute;bottom:48px;left:50%;transform:translateX(-50%);padding:4px 8px;border-radius:6px;background:#2c2c2c;color:#fff;font-size:12px;line-height:18px;white-space:nowrap;pointer-events:none;opacity:0;transition:opacity 100ms ease .25s}
+.preview-toolbar button:hover::after,.preview-toolbar button:focus-visible::after,.preview-mark-menu button:hover::after,.preview-mark-menu button:focus-visible::after{opacity:1}
+.preview-toolbar button.is-active{color:#0c8ce9}
+.preview-mark-menu{left:50%;bottom:var(--dock-bottom);width:288px;transform:translateX(-50%)}
+.preview-mark-menu[hidden]{display:none}
+.preview-mark-menu .preview-mark-current{cursor:default}
+.preview-mark-menu .preview-mark-current:hover{background:transparent}
+
+@media(max-width:1100px){
+ .preview-overlay-content{padding-inline:24px}
+ .preview-neighbor{width:28%;opacity:.14}
+}
+@media(max-width:760px){
+ .preview-overlay-content{inset:var(--header-height) 0 0;padding:26px 16px calc(24px + 50px + 24px)}
+ .preview-filmstrip{justify-content:flex-start;overflow:hidden}
+ .preview-filmstrip button{height:76px;min-height:76px}
+ .preview-filmstrip{flex-basis:76px;height:76px;min-height:76px}
+ .preview-stage{margin-top:24px;min-height:0}
+ .preview-current{max-width:100%;width:100%;height:100%}
+ .preview-neighbor{display:none}
+ .preview-caption{margin-top:24px;font-size:14px}
+ .preview-toolbar{bottom:24px}
+ .preview-mark-menu{bottom:24px}
+}
+@keyframes preview-media-enter{from{opacity:.45;transform:scale(.985)}to{opacity:1;transform:scale(1)}}
+@keyframes preview-media-switch{from{opacity:.82;transform:translateX(var(--preview-shift)) scale(.992)}to{opacity:1;transform:translateX(0) scale(1)}}
+@media(prefers-reduced-motion:reduce){
+ .preview-filmstrip button,.preview-neighbor,.preview-toolbar button,.preview-mark-menu button{transition:none}
+ .preview-current img,.preview-current video{animation:none!important}
+}

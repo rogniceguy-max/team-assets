@@ -1,0 +1,21 @@
+data/
+.env
+.venv/
+__pycache__/
+.pytest_cache/
+artifacts/
+# Local archive of superseded files
+bak/
+backups/
+public-gateway/
+NAS-部署记录.md
+EPISODES-待确认.md
+Dockerfile.nas
+web-header/
+web-release-20260912/
+*.sqlite3
+*.sqlite3-shm
+*.sqlite3-wal
+*.db
+*.pem
+*.key

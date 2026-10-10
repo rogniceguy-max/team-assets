@@ -1,0 +1,18 @@
+:root{--header-height:68px}
+body{padding-top:var(--header-height)}
+/* Paint the fixed header across the scrollbar gutter as in the Figma frame.
+   The page content keeps its stable scrollbar width, while the black header
+   reaches the viewport's physical right edge instead of stopping 15px early. */
+.site-header{position:fixed;left:0;right:auto;width:100vw;inset-block-start:0;height:var(--header-height);min-height:0;z-index:40;display:flex;justify-content:space-between;align-items:center;gap:24px;padding:10px 96px;border:0;background:rgb(0 0 0 / 75%);color:#fff;backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px)}
+.site-header nav{display:flex;gap:12px;align-items:center}.header-actions{justify-self:end}.header-project{display:flex;align-items:center;gap:12px;min-width:0;max-width:calc(100% - 580px)}
+.site-header button{border:0;background:transparent;color:#fff;min-height:48px;height:48px;border-radius:12px;padding:4px 8px;font-size:16px;line-height:24px;white-space:nowrap;display:flex;align-items:center;justify-content:center;gap:6px}
+.site-header .header-button{padding-right:8px;min-width:126px}.site-header #historyBtn{min-width:134px}.site-header .header-square{min-height:40px;width:40px;height:40px;flex:0 0 40px;padding:8px}
+.site-header button:hover,.project-picker:hover{background:#2c2c2c}.site-header button.is-active,.site-header button.is-active:hover{background:#0c8ce9}
+.header-icon{display:block;width:24px;height:24px;flex:0 0 24px;background:currentColor;mask:var(--icon) center/contain no-repeat;-webkit-mask:var(--icon) center/contain no-repeat}
+.header-button>.header-icon{box-sizing:content-box;padding:8px;mask-size:24px;mask-position:left center;-webkit-mask-size:24px;-webkit-mask-position:left center}
+.site-header .header-button>.figma-header-icon{box-sizing:border-box;width:40px;height:40px;flex:0 0 40px;padding:0;mask-size:40px;mask-position:center;-webkit-mask-size:40px;-webkit-mask-position:center}
+.project-picker{position:relative;min-width:0;max-width:100%;border-radius:12px}.project-picker select{appearance:none;-webkit-appearance:none;display:block;max-width:100%;width:134px;min-width:134px;height:48px;padding:4px 54px 4px 16px;background:transparent;border:0;color:white;font-size:16px;text-overflow:ellipsis;border-radius:12px;cursor:pointer}.project-picker option{background:#2c2c2c;color:#fff}.project-picker>.header-icon{position:absolute;right:16px;top:12px;pointer-events:none}
+.site-header :focus-visible{outline:2px solid #0c8ce9;outline-offset:3px}
+body:has(#listDialog[open][data-kind="history"]) #historyBtn,body:has(#listDialog[open][data-kind="trash"]) #trashBtn{background:#0c8ce9}
+@media(max-width:1100px){.site-header{padding:10px 24px;gap:12px}.site-header .header-button{min-width:0}.site-header #historyBtn{min-width:0}.site-header nav{gap:6px}.header-project{gap:4px}}
+@media(max-width:760px){:root{--header-height:124px}.site-header{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:48px 48px;gap:8px;padding:10px 16px}.header-project{max-width:100%;grid-column:1;grid-row:1}.header-actions{grid-column:2;grid-row:1}.header-libraries{grid-column:1 / -1;grid-row:2;justify-self:center}.header-actions .header-button span:last-child{display:none}.site-header .header-actions button{width:40px;padding:0}.header-actions .header-icon{padding:0}.project-picker select{width:100%}}
