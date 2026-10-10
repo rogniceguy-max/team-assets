@@ -1,5 +1,5 @@
 data/
-preview-data/
+preview-data*/
 .env
 .venv/
 __pycache__/

@@ -19,8 +19,8 @@
 - 阶段 1：已完成，提交 `183842a`。增加只读 Service/SQLite 模式、上传初始化保护及独立预览快照工具；当前分支的 8094 Compose 指向 `preview-data` 只读挂载。阶段测试 115 项通过。
 - 阶段 2：已完成，提交 `2c73c75`。增加精确 CORS Origin 白名单和开发代理说明；阶段测试 119 项通过。
 - 阶段 3：已完成，提交 `f2c0bdf`；上传会话 capability token 与 v1 媒体 URL 补丁分别提交 `f7eeb18`、`f922e19`。完整测试 123 项通过。
-- 阶段 4：中文指南与 TypeScript 客户端示例已完成；API Client 通过 TypeScript 5 strict/noEmit 检查，待提交。
-- 阶段 5：独立前端已完成；在临时数据目录上实际启动官方前端、独立前端和 API，验证了跨来源 REST、图片上传，以及两前端双向 SSE/REST 更新，待提交。
+- 阶段 4：已完成，提交 `12d5a00`（中文指南与 TypeScript 客户端）及 `6a8afff`（/docs 验证）；API Client 通过 TypeScript 5 strict/noEmit 检查。
+- 阶段 5：已完成，提交 `87d52d1`。本机用临时数据目录实际启动 API、官方前端和独立前端，验证跨来源 REST、图片上传，以及两前端双向 SSE/REST 更新；未使用正式数据。
 
 ## 当前能力与接口清单
 
@@ -138,4 +138,6 @@ Docker Compose 未把端口绑定到 loopback，默认会在宿主机所有接�
 
 ## 本阶段实际验证限制
 
-已在本地检查源代码和 Compose，运行完整 pytest，并用临时数据目录在真实浏览器中以不同 Origin 同时打开官方前端和独立前端：浏览器跨来源查询/写入/上传可用，两端互相修改后均通过 SSE 收到更新。该浏览器测试没有使用正式数据。Docker CLI 不可用，没有构建/启动容器；没有访问 NAS，因此 NAS Compose/存储挂载仍需部署前验收。
+已在本地检查源代码和 Compose，最终完整 pytest 为 123 项通过、2 条现存依赖警告；TypeScript 5 strict/noEmit、独立前端 JavaScript 语法和 Compose YAML 检查通过。另用临时数据目录在真实浏览器中以不同 Origin 同时打开官方前端和独立前端：浏览器跨来源查询、创建/修改、图片上传可用，两端互相修改后均通过 SSE 收到更新。该浏览器测试没有使用正式数据。Docker CLI 不可用，没有构建/启动容器；没有访问 NAS，因此 NAS Compose/存储挂载仍需部署前验收。
+
+本分支最后的快照配置与文档提交为独立收尾提交；所有实现提交仍只在本地 `platform-api` 分支，未推送或部署。

@@ -48,6 +48,15 @@ MCP：http://NAS地址:8093/mcp
 `WEB_PORT`/`MCP_PORT` 调整；默认分别为 8092/8093。`data` 目录映射到两个容器的
 `/data`，更新镜像不会丢失素材。
 
+8094 预览入口只挂载独立只读快照。需要创建快照时，指定一个尚不存在的目标目录：
+
+```sh
+python scripts/create_preview_snapshot.py ./data ./preview-data-2026-10-10
+```
+
+然后在 `.env` 中设置 `PREVIEW_DATA_DIR=./preview-data-2026-10-10`，再运行
+`docker compose -f docker-compose.preview.yml up -d --build`。该快照工具通过 SQLite backup API 读取一致数据库，并复制原图/缩略图；它不修改源数据。每次刷新请选一个新的目标目录，避免覆盖旧快照。
+
 网页和 MCP 当前没有强制身份认证，也不区分员工身份或权限；能访问端口的客户端拥有相同业务操作能力。CORS 白名单只限制浏览器跨源读取，不能防止脚本、MCP 或其他非浏览器客户端访问，也不能替代认证。服务只能放在受控内网或 VPN 后，必须用防火墙阻止公网访问；严禁将无认证写接口直接转发到公网。远程入口应使用 HTTPS。不要把 NAS 数据库放在 SMB/NFS 网络挂载上。
 
 ## AI / MCP 连接
