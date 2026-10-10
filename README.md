@@ -15,6 +15,8 @@ python -m uvicorn server:app --host 127.0.0.1 --port 8092
 
 访问 http://localhost:8092 。首次启动只有一个默认项目，数据存放在本目录 data 下。可用 DATA_DIR 环境变量更改。API 文档位于 /docs。
 
+员工独立前端请从 [`docs/API-v1.md`](docs/API-v1.md) 开始，并可直接使用 `/openapi.json` 生成客户端；仓库还提供 [`examples/typescript-client.ts`](examples/typescript-client.ts) 与纯前端的 [`examples/standalone-frontend/`](examples/standalone-frontend/)。
+
 独立前端开发时，推荐先使用本地开发服务器代理 `/api` 和 `/files` 到 `http://localhost:8092`，这样开发端口不需要额外跨域配置。若前端必须跨来源直连后端，在 `.env` 设置精确来源，例如 `TEAM_ASSETS_CORS_ORIGINS=http://localhost:5173`；多个来源用逗号分隔。不能设置 `*`。
 
 示例 Vite 代理配置：
@@ -100,7 +102,8 @@ docker compose start
 
 ```powershell
 python -m pytest -q
-node --check web/app.js
+node --check web-dock/app.js
+node --check examples/standalone-frontend/app.js
 ```
 
 Docker 构建需在安装 Docker 的 NAS 或电脑上运行。本项目独立于上级目录的其他应用，不会修改其服务与数据。

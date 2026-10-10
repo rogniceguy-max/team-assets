@@ -6,6 +6,9 @@ services:
     environment:
       DATA_DIR: /data
       TEAM_ASSETS_CORS_ORIGINS: ${TEAM_ASSETS_CORS_ORIGINS:-}
+      MAX_FILE_BYTES: ${MAX_FILE_BYTES:-0}
+      UPLOAD_TTL_SECONDS: ${UPLOAD_TTL_SECONDS:-86400}
+      STAGING_ORPHAN_TTL_SECONDS: ${STAGING_ORPHAN_TTL_SECONDS:-604800}
     volumes:
       - ./data:/data
       - ./web-dock:/app/web:ro
@@ -21,6 +24,8 @@ services:
       # values in the environment for a different host or to re-enable Bearer.
       TEAM_ASSETS_PUBLIC_MCP_URL: ${TEAM_ASSETS_PUBLIC_MCP_URL:-http://192.168.10.28:8093}
       MAX_FILE_BYTES: ${MAX_FILE_BYTES:-0}
+      UPLOAD_TTL_SECONDS: ${UPLOAD_TTL_SECONDS:-86400}
+      STAGING_ORPHAN_TTL_SECONDS: ${STAGING_ORPHAN_TTL_SECONDS:-604800}
       MCP_AUTH_MODE: ${MCP_AUTH_MODE:-none}
       TEAM_ASSETS_MCP_TOKEN: ${TEAM_ASSETS_MCP_TOKEN:-}
     volumes:
