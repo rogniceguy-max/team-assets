@@ -15,6 +15,7 @@ def png_bytes():
 
 def test_v1_contract_covers_crud_files_history_and_keeps_legacy_routes(tmp_path):
     with TestClient(create_app(tmp_path)) as client:
+        assert client.get("/docs").status_code == 200
         spec = client.get("/openapi.json").json()
         assert spec["openapi"].startswith("3.")
         assert "/api/v1/projects" in spec["paths"]
