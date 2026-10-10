@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Team Assets · 独立前端示例</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">TA</span>
+      <div><strong>团队资产</strong><small>独立前端参考客户端</small></div>
+    </div>
+    <form id="connectionForm" class="connection-form">
+      <label for="serverOrigin">API 地址</label>
+      <input id="serverOrigin" type="url" value="http://localhost:8092" spellcheck="false" required>
+      <button type="submit" class="button button-subtle">连接</button>
+      <span id="connectionState" class="connection-state" role="status">未连接</span>
+    </form>
+  </header>
+
+  <main class="workspace">
+    <aside class="sidebar" aria-label="项目和资产">
+      <div class="section-heading">
+        <label for="projectSelect">项目</label>
+        <button id="refreshButton" class="icon-button" type="button" title="刷新">↻</button>
+      </div>
+      <select id="projectSelect" aria-label="选择项目"></select>
+      <div class="section-heading asset-heading">
+        <span>资产</span>
+        <button id="newAssetButton" class="button button-small" type="button">＋ 新建</button>
+      </div>
+      <ul id="assetList" class="asset-list"></ul>
+      <p id="assetListEmpty" class="empty-hint" hidden>这个项目还没有资产</p>
+    </aside>
+
+    <section class="content" aria-live="polite">
+      <div id="emptyState" class="empty-state">
+        <div class="empty-icon" aria-hidden="true">◇</div>
+        <h1>选择一个资产，或创建新资产</h1>
+        <p>这个页面独立调用公开 REST API，不读取官方前端代码。</p>
+      </div>
+
+      <article id="assetPanel" hidden>
+        <div class="panel-title">
+          <div>
+            <p id="assetPath" class="eyebrow"></p>
+            <h1 id="assetTitle"></h1>
+          </div>
+          <button id="editAssetButton" class="button button-subtle" type="button">编辑信息</button>
+        </div>
+
+        <form id="assetForm" class="asset-form" hidden>
+          <div class="form-grid">
+            <label>资产名称<input id="assetName" name="name" maxlength="200" required></label>
+            <label>分类
+              <select id="assetCategory" name="category">
+                <option>人物</option><option>场景</option><option>道具</option><option>其它</option>
+              </select>
+            </label>
+            <label class="wide">定位 / 用途<input id="assetRole" name="role" maxlength="1000"></label>
+          </div>
+          <div class="form-actions">
+            <button id="cancelAssetButton" class="button button-subtle" type="button">取消</button>
+            <button id="saveAssetButton" class="button button-primary" type="submit">保存</button>
+          </div>
+        </form>
+
+        <div class="detail-block">
+          <div class="section-heading">
+            <div><h2>变体</h2><p>每个变体可以独立选择定稿，素材在资产内共享。</p></div>
+          </div>
+          <ul id="variantList" class="variant-list"></ul>
+          <p id="variantEmpty" class="empty-hint" hidden>还没有变体</p>
+        </div>
+
+        <div class="detail-block">
+          <div class="section-heading">
+            <div><h2>素材</h2><p id="materialCount">资产共享素材池</p></div>
+            <label class="button button-primary upload-button">
+              ＋ 上传图片
+              <input id="imageInput" type="file" accept="image/*" multiple hidden>
+            </label>
+          </div>
+          <div id="materials" class="material-grid"></div>
+          <p id="materialEmpty" class="empty-hint" hidden>还没有素材，可以从上方上传图片</p>
+        </div>
+      </article>
+    </section>
+  </main>
+
+  <div id="notice" class="notice" role="status" hidden></div>
+  <dialog id="imagePreview" class="image-preview">
+    <button id="closePreview" class="preview-close" type="button" aria-label="关闭预览">×</button>
+    <img id="previewImage" alt="素材预览">
+    <p id="previewName"></p>
+  </dialog>
+  <script src="./app.js" defer></script>
+</body>
+</html>
