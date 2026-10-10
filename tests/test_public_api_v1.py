@@ -165,8 +165,17 @@ def test_v1_resumable_upload_intake_and_project_import_are_idempotent(tmp_path):
         )
         assert accepted.status_code == 200, accepted.text
         assert accepted.json()["offset"] == len(content)
-        assert client.get(session["upload_url"], headers={"X-Upload-Token": session["upload_token"]}).json()["offset"] == len(content)
-        ready = client.post(f"{session['upload_url']}/complete")
+        unauthenticated_status = client.get(session["upload_url"])
+        assert unauthenticated_status.status_code == 401
+        assert client.get(
+            session["upload_url"], headers={"X-Upload-Token": session["upload_token"]}
+        ).json()["offset"] == len(content)
+        unauthenticated_complete = client.post(f"{session['upload_url']}/complete")
+        assert unauthenticated_complete.status_code == 401
+        ready = client.post(
+            f"{session['upload_url']}/complete",
+            headers={"X-Upload-Token": session["upload_token"]},
+        )
         assert ready.status_code == 200, ready.text
         file_id = ready.json()["file_id"]
 

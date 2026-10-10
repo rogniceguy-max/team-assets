@@ -1,5 +1,5 @@
 """Versioned resumable upload and atomic intake endpoints."""
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Header, Query, Request
 from intake import IntakeService
 from schemas.public import (
     ERROR_RESPONSES,
@@ -30,8 +30,12 @@ def begin_upload(data: UploadBeginRequest, request: Request):
 @router.get(
     "/uploads/{upload_id}", response_model=UploadStatusResponse, responses=ERROR_RESPONSES
 )
-def get_upload_status(upload_id: str, request: Request):
-    return request.app.state.uploads.status(upload_id)
+def get_upload_status(
+    upload_id: str,
+    request: Request,
+    upload_token: str | None = Header(default=None, alias="X-Upload-Token"),
+):
+    return request.app.state.uploads.status_for_token(upload_id, upload_token)
 
 
 @router.put(
@@ -63,15 +67,23 @@ async def upload_chunk(
     response_model=UploadStatusResponse,
     responses=ERROR_RESPONSES,
 )
-def complete_upload(upload_id: str, request: Request):
-    return request.app.state.uploads.complete_upload(upload_id)
+def complete_upload(
+    upload_id: str,
+    request: Request,
+    upload_token: str | None = Header(default=None, alias="X-Upload-Token"),
+):
+    return request.app.state.uploads.complete_upload(upload_id, token=upload_token or "")
 
 
 @router.delete(
     "/uploads/{upload_id}", response_model=UploadStatusResponse, responses=ERROR_RESPONSES
 )
-def cancel_upload(upload_id: str, request: Request):
-    return request.app.state.uploads.cancel_upload(upload_id)
+def cancel_upload(
+    upload_id: str,
+    request: Request,
+    upload_token: str | None = Header(default=None, alias="X-Upload-Token"),
+):
+    return request.app.state.uploads.cancel_upload(upload_id, token=upload_token or "")
 
 
 @router.post(

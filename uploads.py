@@ -229,10 +229,26 @@ class UploadManager:
     def _public(self, row):
         return {k: row[k] for k in ("id", "filename", "size", "offset", "status", "file_id", "expires_at")}
 
+    @staticmethod
+    def _check_upload_token(row, token):
+        if not token or not hmac.compare_digest(
+            hashlib.sha256(token.encode()).hexdigest(), row["tokenhash"]
+        ):
+            raise HTTPException(401, {"code": "INVALID_UPLOAD_TOKEN", "message": "上传会话令牌无效"})
+
     def status(self, upload_id):
         self._ensure_writable()
         with self.service.connect() as c:
             row = self._row(c, upload_id)
+        result = self._public(row)
+        result["expired"] = row["expires_at"] <= time.time()
+        return result
+
+    def status_for_token(self, upload_id, token):
+        self._ensure_writable()
+        with self.service.connect() as c:
+            row = self._row(c, upload_id)
+        self._check_upload_token(row, token)
         result = self._public(row)
         result["expired"] = row["expires_at"] <= time.time()
         return result
@@ -295,8 +311,7 @@ class UploadManager:
             auth = request.headers.get("authorization", "")
             if auth.startswith("Bearer "):
                 provided = auth[7:].strip()
-            if not provided or not hmac.compare_digest(hashlib.sha256(provided.encode()).hexdigest(), row["tokenhash"]):
-                raise HTTPException(401, "Invalid upload token")
+            self._check_upload_token(row, provided)
             if request.method == "GET":
                 return JSONResponse(self.status(upload_id))
             self._writable(row)
@@ -376,7 +391,7 @@ class UploadManager:
             if temporary:
                 temporary.unlink(missing_ok=True)
 
-    def complete_upload(self, upload_id):
+    def complete_upload(self, upload_id, token=None):
         self._ensure_writable()
         path = self.path(upload_id)
         snapshot = self.root / "staging" / (uuid.uuid4().hex + ".complete")
@@ -390,6 +405,8 @@ class UploadManager:
             with self._session_lock(upload_id):
                 with self.service.connect(write=True) as c:
                     row = self._row(c, upload_id)
+                    if token is not None:
+                        self._check_upload_token(row, token)
                     if row["status"] == "ready":
                         terminal = True
                         return self._public(row)
@@ -408,6 +425,8 @@ class UploadManager:
                 raise HTTPException(422, "Invalid image, video, excessive pixel dimensions, or storage error") from exc
             with self.service.connect(write=True) as c:
                 current = self._row(c, upload_id)
+                if token is not None:
+                    self._check_upload_token(current, token)
                 if current["status"] == "ready":
                     terminal = True
                     return self._public(current)
@@ -442,11 +461,13 @@ class UploadManager:
             snapshot.unlink(missing_ok=True)
             temporary_thumb.unlink(missing_ok=True)
 
-    def cancel_upload(self, upload_id):
+    def cancel_upload(self, upload_id, token=None):
         self._ensure_writable()
         with self._session_lock(upload_id):
             with self.service.connect(write=True) as c:
                 row = self._row(c, upload_id)
+                if token is not None:
+                    self._check_upload_token(row, token)
                 if row["status"] == "ready":
                     result = self._public(row)
                 else:
