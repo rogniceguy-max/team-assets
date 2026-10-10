@@ -60,6 +60,8 @@ def test_v1_contract_covers_crud_files_history_and_keeps_legacy_routes(tmp_path)
         )
         assert uploaded.status_code == 201, uploaded.text
         material = uploaded.json()["materials"][0]
+        assert material["url"].startswith("/api/v1/files/")
+        assert material["thumbnail_url"].startswith("/api/v1/files/")
         finalized = client.patch(
             f"/api/v1/variants/{variant['id']}/final-material",
             json={"version": variant["version"], "material_id": material["id"]},
@@ -121,6 +123,7 @@ def test_v1_candidate_library_uses_shared_service_and_revision_conflicts(tmp_pat
         assert upload.status_code == 201, upload.text
         candidates = upload.json()["candidates"]
         assert len(candidates) == 3
+        assert candidates[0]["url"].startswith("/api/v1/files/")
         folders = client.get(f"/api/v1/candidate-folders?project_id={project['id']}").json()["folders"]
         assert [folder["path"] for folder in folders] == ["folder"]
         listing = client.get(f"/api/v1/candidates?project_id={project['id']}&sort_by=name")

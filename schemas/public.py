@@ -1,9 +1,10 @@
 """Stable request/response contracts for the public REST API."""
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from episodes import EPISODES_HELP, EPISODE_USAGE_HELP
 
@@ -149,6 +150,23 @@ class EpisodeUsageResponse(PublicResponse):
     note: str = ""
 
 
+class FileLinksResponse(PublicResponse):
+    file_id: str
+    url: str
+    thumbnail_url: str
+
+    @model_validator(mode="before")
+    @classmethod
+    def use_versioned_file_urls(cls, value):
+        if isinstance(value, Mapping) and value.get("file_id"):
+            normalized = dict(value)
+            file_url = f"/api/v1/files/{normalized['file_id']}"
+            normalized["url"] = file_url
+            normalized["thumbnail_url"] = f"{file_url}?thumbnail=true"
+            return normalized
+        return value
+
+
 class VariantResponse(PublicResponse):
     id: str
     asset_id: str
@@ -198,7 +216,7 @@ class VariantPageResponse(PublicResponse):
     asset_id: str
 
 
-class MaterialResponse(PublicResponse):
+class MaterialResponse(FileLinksResponse):
     id: str
     asset_id: str
     variant_id: str | None = None
@@ -215,8 +233,6 @@ class MaterialResponse(PublicResponse):
     width: int | None = None
     height: int | None = None
     sha256: str | None = None
-    url: str
-    thumbnail_url: str
     path: str | None = None
 
 
@@ -243,7 +259,7 @@ class CandidateReferenceResponse(PublicResponse):
     source: str = "mcp"
 
 
-class CandidateResponse(PublicResponse):
+class CandidateResponse(FileLinksResponse):
     id: str
     project_id: str
     file_id: str
@@ -267,8 +283,6 @@ class CandidateResponse(PublicResponse):
     width: int | None = None
     height: int | None = None
     sha256: str | None = None
-    url: str
-    thumbnail_url: str
     references: list[CandidateReferenceResponse] = Field(default_factory=list)
 
 
