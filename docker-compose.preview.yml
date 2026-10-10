@@ -9,6 +9,7 @@ services:
     environment:
       DATA_DIR: /data
       TEAM_ASSETS_READ_ONLY: "1"
+      TEAM_ASSETS_CORS_ORIGINS: ${TEAM_ASSETS_CORS_ORIGINS:-}
       WEB_DIR: /app/web-dock
       ENABLE_MCP_HTTP: "1"
       MCP_AUTH_MODE: none

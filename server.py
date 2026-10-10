@@ -7,6 +7,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -18,8 +19,43 @@ from routers.projects import router as projects_router
 from services.facade import AssetService
 
 
+def _normalize_origin(value):
+    try:
+        parsed = urlsplit(value.strip())
+    except (AttributeError, ValueError):
+        return None
+    if (
+        parsed.scheme.lower() not in {"http", "https"}
+        or not parsed.netloc
+        or parsed.path not in {"", "/"}
+        or parsed.query
+        or parsed.fragment
+        or parsed.username is not None
+        or parsed.password is not None
+    ):
+        return None
+    return f"{parsed.scheme.lower()}://{parsed.netloc.lower()}"
+
+
+def _cors_origins_from_environment():
+    values = os.environ.get("TEAM_ASSETS_CORS_ORIGINS", "")
+    origins = set()
+    for value in values.split(","):
+        value = value.strip()
+        if not value:
+            continue
+        origin = _normalize_origin(value)
+        if origin is None:
+            raise RuntimeError(
+                "TEAM_ASSETS_CORS_ORIGINS must be a comma-separated list of exact http(s) origins"
+            )
+        origins.add(origin)
+    return origins
+
+
 def create_app(data_dir=None, static_dir=None, mcp_app=None, *, service=None, read_only=None):
     app = FastAPI(title="Team Assets", version="0.1.0")
+    allowed_origins = _cors_origins_from_environment()
     configured_read_only = (
         os.environ.get("TEAM_ASSETS_READ_ONLY", "0").strip().lower() in {"1", "true", "yes", "on"}
         if read_only is None
@@ -59,7 +95,7 @@ def create_app(data_dir=None, static_dir=None, mcp_app=None, *, service=None, re
         await revision_poller_ready.wait()
 
     @app.middleware("http")
-    async def same_origin_writes(request, call_next):
+    async def origin_and_read_only_policy(request, call_next):
         if (
             configured_read_only
             and request.method in {"POST", "PUT", "PATCH", "DELETE"}
@@ -70,14 +106,45 @@ def create_app(data_dir=None, static_dir=None, mcp_app=None, *, service=None, re
                 status_code=403,
             )
         origin = request.headers.get("origin")
-        if request.method in {"POST", "PUT", "PATCH", "DELETE"} and origin:
-            try:
-                allowed = urlsplit(origin).netloc.lower() == request.headers.get("host", "").lower()
-            except ValueError:
-                allowed = False
-            if not allowed:
-                return JSONResponse({"detail": "不允许跨站修改"}, status_code=403)
+        if origin:
+            normalized = _normalize_origin(origin)
+            request_origin = _normalize_origin(
+                f"{request.url.scheme}://{request.headers.get('host', '')}"
+            )
+            if normalized is None or (normalized != request_origin and normalized not in allowed_origins):
+                return JSONResponse(
+                    {"detail": {"code": "ORIGIN_NOT_ALLOWED", "message": "此浏览器来源未列入可信前端白名单"}},
+                    status_code=403,
+                )
         return await call_next(request)
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=sorted(allowed_origins),
+        allow_credentials=False,
+        allow_methods=["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=[
+            "Accept",
+            "Authorization",
+            "Content-Type",
+            "Idempotency-Key",
+            "If-Match",
+            "If-None-Match",
+            "Last-Event-ID",
+            "MCP-Protocol-Version",
+            "Range",
+            "X-Upload-Token",
+        ],
+        expose_headers=[
+            "Content-Disposition",
+            "ETag",
+            "Last-Modified",
+            "Location",
+            "X-Team-Assets-Client-SHA256",
+            "X-Team-Assets-Client-Version",
+        ],
+        max_age=600,
+    )
 
     app.include_router(projects_router)
     app.include_router(assets_router)

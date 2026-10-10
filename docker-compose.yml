@@ -5,6 +5,7 @@ services:
       - "${WEB_PORT:-8092}:8000"
     environment:
       DATA_DIR: /data
+      TEAM_ASSETS_CORS_ORIGINS: ${TEAM_ASSETS_CORS_ORIGINS:-}
     volumes:
       - ./data:/data
       - ./web-dock:/app/web:ro

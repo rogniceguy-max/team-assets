@@ -15,6 +15,21 @@ python -m uvicorn server:app --host 127.0.0.1 --port 8092
 
 访问 http://localhost:8092 。首次启动只有一个默认项目，数据存放在本目录 data 下。可用 DATA_DIR 环境变量更改。API 文档位于 /docs。
 
+独立前端开发时，推荐先使用本地开发服务器代理 `/api` 和 `/files` 到 `http://localhost:8092`，这样开发端口不需要额外跨域配置。若前端必须跨来源直连后端，在 `.env` 设置精确来源，例如 `TEAM_ASSETS_CORS_ORIGINS=http://localhost:5173`；多个来源用逗号分隔。不能设置 `*`。
+
+示例 Vite 代理配置：
+
+```js
+export default {
+  server: {
+    proxy: {
+      '/api': 'http://localhost:8092',
+      '/files': 'http://localhost:8092',
+    },
+  },
+};
+```
+
 ## NAS Docker
 
 将整个 team-assets 文件夹复制到 NAS 本机存储目录后直接执行（默认无认证）：
@@ -31,7 +46,7 @@ MCP：http://NAS地址:8093/mcp
 `WEB_PORT`/`MCP_PORT` 调整；默认分别为 8092/8093。`data` 目录映射到两个容器的
 `/data`，更新镜像不会丢失素材。
 
-网页是无账号公共编辑区，部署在可信内网或现有 VPN 后。远程入口应使用 HTTPS。不要把 NAS 数据库放在 SMB/NFS 网络挂载上。
+网页和 MCP 当前没有强制身份认证，也不区分员工身份或权限；能访问端口的客户端拥有相同业务操作能力。CORS 白名单只限制浏览器跨源读取，不能防止脚本、MCP 或其他非浏览器客户端访问，也不能替代认证。服务只能放在受控内网或 VPN 后，必须用防火墙阻止公网访问；严禁将无认证写接口直接转发到公网。远程入口应使用 HTTPS。不要把 NAS 数据库放在 SMB/NFS 网络挂载上。
 
 ## AI / MCP 连接
 
