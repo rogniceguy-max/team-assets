@@ -672,6 +672,7 @@ class CandidateMixin:
             return {"ok": True}
 
     def add_candidate_uploads(self, project_id, uploads, category="其它", idempotency_key=None):
+        self.ensure_writable()
         if not isinstance(category, str) or category not in CANDIDATE_CATEGORIES:
             raise HTTPException(422, "候选素材分类不正确")
         if not isinstance(uploads, list) or not uploads or len(uploads) > 1000:

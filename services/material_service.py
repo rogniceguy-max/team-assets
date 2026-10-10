@@ -32,6 +32,7 @@ class MaterialMixin:
         c.execute("CREATE INDEX IF NOT EXISTS materials_asset_active ON materials(asset_id,deleted_at)")
 
     def add_materials(self, variant_id, uploads, source="manual", idempotency_key=None, *, asset_id=None):
+        self.ensure_writable()
         if bool(variant_id) == bool(asset_id):
             raise HTTPException(422, "variant_id 与 asset_id 必须且只能提供一个")
         self.validate_fields({"source": source})

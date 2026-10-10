@@ -3,6 +3,7 @@ import sqlite3
 import threading
 from contextlib import contextmanager, nullcontext
 from pathlib import Path
+from fastapi import HTTPException
 
 from core.utils import uid, now
 from episodes import migrate_episodes
@@ -11,24 +12,46 @@ from episodes import migrate_episodes
 class DBMixin:
     """Manages database connection lifecycle, DDL, and schema migrations."""
 
-    def __init__(self, data_dir, *args, **kwargs):
+    def __init__(self, data_dir, *args, read_only=False, **kwargs):
         self.root = Path(data_dir).resolve()
-        for name in ("database", "originals", "thumbnails", "staging", "backups"):
-            (self.root / name).mkdir(parents=True, exist_ok=True)
+        self.read_only = bool(read_only)
+        if self.read_only:
+            self.db = self.root / "database" / "assets.sqlite3"
+            if not self.db.is_file():
+                raise RuntimeError(f"Read-only data store is missing: {self.db}")
+        else:
+            for name in ("database", "originals", "thumbnails", "staging", "backups"):
+                (self.root / name).mkdir(parents=True, exist_ok=True)
         self.lock = threading.RLock()
         self.db = self.root / "database" / "assets.sqlite3"
         fresh_store = not self.db.exists()
         super().__init__(*args, **kwargs)
-        self._init_schema(fresh_store=fresh_store)
+        if not self.read_only:
+            self._init_schema(fresh_store=fresh_store)
+
+    def ensure_writable(self):
+        if self.read_only:
+            raise HTTPException(
+                403,
+                {"code": "READ_ONLY", "message": "此服务当前为只读预览，不能修改数据"},
+            )
 
     @contextmanager
     def connect(self, write=False):
+        if write:
+            self.ensure_writable()
         with self.lock if write else nullcontext():
             if write:
                 self._pending_change_revision = None
-            c = sqlite3.connect(self.db, timeout=30)
+            if self.read_only:
+                uri = self.db.as_uri() + "?mode=ro"
+                c = sqlite3.connect(uri, timeout=30, uri=True)
+            else:
+                c = sqlite3.connect(self.db, timeout=30)
             c.row_factory = sqlite3.Row
             c.execute("PRAGMA foreign_keys=ON")
+            if self.read_only:
+                c.execute("PRAGMA query_only=ON")
             c.execute("BEGIN IMMEDIATE" if write else "BEGIN")
             committed = False
             try:

@@ -35,11 +35,16 @@ class UploadManager:
     def __init__(self, service):
         self.service = service
         self.root = service.root
+        self.read_only = bool(getattr(service, "read_only", False))
         self.max_file_bytes = int(os.getenv("MAX_FILE_BYTES", "0"))
         self.ttl = int(os.getenv("UPLOAD_TTL_SECONDS", "86400"))
         self.staging_orphan_ttl = int(os.getenv("STAGING_ORPHAN_TTL_SECONDS", "604800"))
         if self.max_file_bytes < 0 or self.ttl < 1 or self.staging_orphan_ttl < 1:
             raise ValueError("Invalid upload configuration")
+        self.routes = []
+        self._last_prune = time.time()
+        if self.read_only:
+            return
         (self.root / "staging").mkdir(parents=True, exist_ok=True)
         with service.connect(write=True) as c:
             c.execute("""CREATE TABLE IF NOT EXISTS upload_sessions(
@@ -52,11 +57,19 @@ class UploadManager:
                 "CREATE INDEX IF NOT EXISTS upload_sessions_status_expiry ON upload_sessions(status,expires_at)"
             )
         self.routes = [Route("/uploads/{upload_id}", self.http, methods=["GET", "PUT"])]
-        self._last_prune = time.time()
         self.prune_expired_sessions()
+
+    def _ensure_writable(self):
+        if self.read_only:
+            raise HTTPException(
+                403,
+                {"code": "READ_ONLY", "message": "此服务当前为只读预览，不能上传或清理上传会话"},
+            )
 
     def prune_expired_sessions(self):
         """Clean up expired upload sessions and uncommitted staging files."""
+        if self.read_only:
+            return 0
         now_ts = time.time()
         removed = []
         try:
@@ -217,6 +230,7 @@ class UploadManager:
         return {k: row[k] for k in ("id", "filename", "size", "offset", "status", "file_id", "expires_at")}
 
     def status(self, upload_id):
+        self._ensure_writable()
         with self.service.connect() as c:
             row = self._row(c, upload_id)
         result = self._public(row)
@@ -224,6 +238,7 @@ class UploadManager:
         return result
 
     def begin_upload(self, filename, size, sha256=None, idempotency_key=None):
+        self._ensure_writable()
         if time.time() - self._last_prune > 300:
             self._last_prune = time.time()
             self.prune_expired_sessions()
@@ -269,6 +284,8 @@ class UploadManager:
             raise HTTPException(409, f"Upload is already {row['status']}")
 
     async def http(self, request):
+        if self.read_only:
+            return JSONResponse({"detail": {"code": "READ_ONLY", "message": "此服务当前为只读预览"}}, status_code=403)
         upload_id = request.path_params["upload_id"]
         temporary = None
         try:
@@ -360,6 +377,7 @@ class UploadManager:
                 temporary.unlink(missing_ok=True)
 
     def complete_upload(self, upload_id):
+        self._ensure_writable()
         path = self.path(upload_id)
         snapshot = self.root / "staging" / (uuid.uuid4().hex + ".complete")
         temporary_thumb = self.root / "staging" / (uuid.uuid4().hex + ".jpg")
@@ -425,6 +443,7 @@ class UploadManager:
             temporary_thumb.unlink(missing_ok=True)
 
     def cancel_upload(self, upload_id):
+        self._ensure_writable()
         with self._session_lock(upload_id):
             with self.service.connect(write=True) as c:
                 row = self._row(c, upload_id)

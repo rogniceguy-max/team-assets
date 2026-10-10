@@ -6,67 +6,33 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from core.bus import EventBusMixin
-from core.config import (
-    CANDIDATE_CATEGORIES,
-    CANDIDATE_MATCH_STATUSES,
-    CANDIDATE_STATUSES,
-    CHILDREN,
-    FORMATS,
-    MAX_UPLOAD,
-    PARENTS,
-    TABLES,
-)
-from core.db import DBMixin
-from core.utils import now, uid
-from media_utils import clean_relative_path, inspect_media
+from core.utils import now, uid  # Compatibility exports used by older local scripts/tests.
 from routers.assets import router as assets_router
 from routers.candidates import router as candidates_router
 from routers.events import router as events_router
 from routers.projects import router as projects_router
-from schemas.models import (
-    AssetInput,
-    AssetPatch,
-    CandidateFileInput,
-    CandidateFolderPatch,
-    CandidateMoveInput,
-    CandidatePatch,
-    CandidateReferenceInput,
-    CandidateReorderEntry,
-    CandidateReorderInput,
-    ProjectInput,
-    VariantInput,
-    VariantPatch,
-)
-from services.asset_service import AssetMixin
-from services.base import BaseDomainService
-from services.candidate_service import CandidateMixin
-from services.material_service import MaterialMixin
-from services.project_service import ProjectMixin
+from services.facade import AssetService
 
 
-class AssetService(
-    DBMixin,
-    EventBusMixin,
-    BaseDomainService,
-    ProjectMixin,
-    AssetMixin,
-    MaterialMixin,
-    CandidateMixin,
-):
-    """Unified service facade aggregating domain services and infrastructure."""
-
-    def __init__(self, data_dir):
-        super().__init__(data_dir=data_dir)
-
-
-def create_app(data_dir=None, static_dir=None, mcp_app=None):
+def create_app(data_dir=None, static_dir=None, mcp_app=None, *, service=None, read_only=None):
     app = FastAPI(title="Team Assets", version="0.1.0")
-    service = AssetService(data_dir or os.environ.get("DATA_DIR", str(Path(__file__).parent / "data")))
+    configured_read_only = (
+        os.environ.get("TEAM_ASSETS_READ_ONLY", "0").strip().lower() in {"1", "true", "yes", "on"}
+        if read_only is None
+        else bool(read_only)
+    )
+    if service is None:
+        service = AssetService(
+            data_dir or os.environ.get("DATA_DIR", str(Path(__file__).parent / "data")),
+            read_only=configured_read_only,
+        )
+    elif read_only is not None and bool(getattr(service, "read_only", False)) != configured_read_only:
+        raise ValueError("read_only must match the injected service mode")
+    configured_read_only = bool(getattr(service, "read_only", configured_read_only))
     app.state.service = service
     revision_poller_task = None
     revision_poller_ready = None
@@ -94,6 +60,15 @@ def create_app(data_dir=None, static_dir=None, mcp_app=None):
 
     @app.middleware("http")
     async def same_origin_writes(request, call_next):
+        if (
+            configured_read_only
+            and request.method in {"POST", "PUT", "PATCH", "DELETE"}
+            and not request.url.path.startswith("/mcp")
+        ):
+            return JSONResponse(
+                {"detail": {"code": "READ_ONLY", "message": "此服务当前为只读预览，不能修改数据"}},
+                status_code=403,
+            )
         origin = request.headers.get("origin")
         if request.method in {"POST", "PUT", "PATCH", "DELETE"} and origin:
             try:
@@ -172,14 +147,20 @@ def create_app(data_dir=None, static_dir=None, mcp_app=None):
     return app
 
 
-preview_mcp = None
-if os.environ.get("ENABLE_MCP_HTTP") == "1":
-    from mcp_server import create_app as create_mcp_app
+def _default_app():
+    data_dir = os.environ.get("DATA_DIR", str(Path(__file__).parent / "data"))
+    read_only = os.environ.get("TEAM_ASSETS_READ_ONLY", "0").strip().lower() in {"1", "true", "yes", "on"}
+    service = AssetService(data_dir, read_only=read_only)
+    preview_mcp = None
+    if os.environ.get("ENABLE_MCP_HTTP") == "1":
+        from mcp_server import create_app as create_mcp_app
 
-    preview_mcp = create_mcp_app(
-        data_dir=os.environ.get("DATA_DIR"),
-        auth_mode=os.environ.get("MCP_AUTH_MODE", "none"),
-        streamable_http_path="/",
-    )
+        preview_mcp = create_mcp_app(
+            service=service,
+            auth_mode=os.environ.get("MCP_AUTH_MODE", "none"),
+            streamable_http_path="/",
+        )
+    return create_app(service=service, static_dir=os.environ.get("WEB_DIR"), mcp_app=preview_mcp)
 
-app = create_app(static_dir=os.environ.get("WEB_DIR"), mcp_app=preview_mcp)
+
+app = _default_app()

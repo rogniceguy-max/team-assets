@@ -73,7 +73,7 @@ class ProjectMixin:
         if entity_type not in TABLES:
             raise HTTPException(422, "类型必须是 project、asset 或 variant")
         table = TABLES[entity_type]
-        with self.connect(write=True) as c:
+        with self.connect(write=not dry_run) as c:
             before = self.require(c, table, item_id)
             self.check_version(before, version)
             tree = self._subtree(c, table, item_id)

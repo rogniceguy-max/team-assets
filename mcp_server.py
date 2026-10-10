@@ -29,7 +29,7 @@ from pydantic import BaseModel, Field, ConfigDict
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from server import AssetService
+from services.facade import AssetService
 from uploads import UploadManager
 from intake import IntakeService
 from episodes import EPISODES_HELP, EPISODE_USAGE_HELP
@@ -157,7 +157,8 @@ class BearerAndBodyLimitMiddleware:
 
 
 def create_app(data_dir: str | Path | None = None, token: str | None = None,
-               auth_mode: str | None = None, streamable_http_path: str = "/mcp"):
+               auth_mode: str | None = None, streamable_http_path: str = "/mcp",
+               *, service=None, read_only: bool | None = None):
     """Create the MCP ASGI app.
 
     ``auth_mode`` accepts ``none`` (the default for the NAS) or ``bearer``.
@@ -178,7 +179,18 @@ def create_app(data_dir: str | Path | None = None, token: str | None = None,
     secret = token if token is not None else os.environ.get("TEAM_ASSETS_MCP_TOKEN", "")
     if mode == "bearer" and (not secret or not secret.strip()):
         raise RuntimeError("Set TEAM_ASSETS_MCP_TOKEN before starting the MCP server")
-    service = AssetService(data_dir or os.environ.get("DATA_DIR", str(Path(__file__).parent / "data")))
+    configured_read_only = (
+        os.environ.get("TEAM_ASSETS_READ_ONLY", "0").strip().lower() in {"1", "true", "yes", "on"}
+        if read_only is None
+        else bool(read_only)
+    )
+    if service is None:
+        service = AssetService(
+            data_dir or os.environ.get("DATA_DIR", str(Path(__file__).parent / "data")),
+            read_only=configured_read_only,
+        )
+    elif read_only is not None and bool(getattr(service, "read_only", False)) != configured_read_only:
+        raise ValueError("read_only must match the injected service mode")
     uploads = UploadManager(service)
     intake = IntakeService(service)
     mcp = FastMCP("Team Assets", host="0.0.0.0", port=8001, stateless_http=True,
